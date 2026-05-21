@@ -1,15 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native';
 
-interface SearchFeature {
-  geometry: {
-    coordinates: [number, number]; // [lon, lat]
-  };
-  properties: {
-    label?: string;
-    name?: string;
-    city?: string;
-  };
+interface NominatimResult {
+  place_id: number;
+  lat: string;
+  lon: string;
+  display_name: string;
+  name: string;
 }
 
 interface SearchBarProps {
@@ -18,24 +15,35 @@ interface SearchBarProps {
 
 export const SearchBar = ({ onLocationSelect }: SearchBarProps) => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchFeature[]>([]);
+  const [results, setResults] = useState<NominatimResult[]>([]);
 
-  const handleSearch = async (text: string) => {
-    setQuery(text);
-    if (text.length < 3) {
-      setResults([]);
-      return;
-    }
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (query.length >= 3) {
+        performSearch(query);
+      } else {
+        setResults([]);
+      }
+    }, 500);
 
-    // Bias hacia Mendoza para que el Parque San Martín aparezca primero
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=5&lat=-32.89&lon=-68.84`;
+    return () => clearTimeout(delayDebounceFn);
+  }, [query]);
+
+  const performSearch = async (text: string) => {
+    const url = `https://casaservidor.myddns.me/nominatim/search?q=${encodeURIComponent(text)}&format=json`;
 
     try {
       const response = await fetch(url);
       const json = await response.json();
-      setResults(json.features as SearchFeature[]);
+      // Nominatim might return an error object or an array. We expect an array.
+      if (Array.isArray(json)) {
+        setResults(json as NominatimResult[]);
+      } else {
+        setResults([]);
+      }
     } catch (e) {
       console.error("Error en búsqueda:", e);
+      setResults([]);
     }
   };
 
@@ -46,24 +54,28 @@ export const SearchBar = ({ onLocationSelect }: SearchBarProps) => {
         placeholder="Buscar lugar o parada..."
         placeholderTextColor="#666"
         value={query}
-        onChangeText={handleSearch}
+        onChangeText={setQuery}
       />
       {results.length > 0 && (
         <View style={styles.resultsList}>
           {results.map((item, index) => (
             <TouchableOpacity
-              key={index}
+              key={item.place_id || index}
               onPress={() => {
-                const [lon, lat] = item.geometry.coordinates;
-                console.log("Seleccionado:", lon, lat); // Para debug en consola
+                const lon = parseFloat(item.lon);
+                const lat = parseFloat(item.lat);
                 onLocationSelect(lon, lat);
                 setResults([]);
-                setQuery(item.properties.name || item.properties.label || '');
+                setQuery(item.name || item.display_name.split(',')[0]);
               }}
               style={styles.resultItem}
             >
-              <Text style={styles.mainText}>{item.properties.name || item.properties.label}</Text>
-              <Text style={styles.cityText}>{item.properties.city || 'Mendoza'}</Text>
+              <Text style={styles.mainText} numberOfLines={1}>
+                {item.name || item.display_name.split(',')[0]}
+              </Text>
+              <Text style={styles.cityText} numberOfLines={2}>
+                {item.display_name}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
