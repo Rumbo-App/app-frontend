@@ -1,22 +1,49 @@
 import React from 'react';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
-import { useStops } from '../db/hooks/useStops';
 
-export const StopsLayer = () => {
-    const { data, isLoading } = useStops();
+interface StopsLayerProps {
+    data: any;
+    isLoading: boolean;
+    onStopPress?: (stop: any) => void;
+    selectedStopId?: number | null;
+}
 
-    // 1. Log to check if data is actually reaching this component
-    console.log("StopsLayer Data:", data?.features?.length);
-
+export const StopsLayer = ({ data, isLoading, onStopPress, selectedStopId }: StopsLayerProps) => {
     if (isLoading || !data?.features || data.features.length === 0) {
         return null;
     }
 
+    const handlePress = (event: any) => {
+        // Prevent event from bubbling to Map.onPress immediately
+        if (event.stopPropagation) {
+            event.stopPropagation();
+        }
+        
+        const features = event.nativeEvent?.features || event.features;
+        if (onStopPress && features && features.length > 0) {
+            const feature = features[0];
+            
+            // Skip if it's a cluster - clusters are handled by the native engine
+            if (feature.properties?.cluster || feature.properties?.point_count) {
+                return;
+            }
+
+            onStopPress(feature.properties);
+        }
+    };
+
     return (
-        <GeoJSONSource id="mendo-source" data={data} cluster={true} clusterRadius={35}>
+        <GeoJSONSource 
+            id="stops-source" 
+            data={data} 
+            cluster={true} 
+            clusterRadius={35}
+            onPress={handlePress}
+            hitbox={{ top: 10, right: 10, bottom: 10, left: 10 }}
+        >
             {/* CLUSTERS */}
             <Layer
-                id="mendo-clusters"
+                id="stops-clusters"
                 type="circle"
                 filter={['has', 'point_count']}
                 paint={{
@@ -30,7 +57,7 @@ export const StopsLayer = () => {
 
             {/* 2. THE ID TAG (Text on top) */}
             <Layer
-                id="mendo-points-labels"
+                id="stops-points-labels"
                 type="symbol" // Symbol type allows text
                 filter={['!', ['has', 'point_count']]}
                 layout={{
@@ -50,12 +77,18 @@ export const StopsLayer = () => {
 
             {/* INDIVIDUAL POINTS */}
             <Layer
-                id="mendo-points"
+                id="stops-points"
                 type="circle"
                 filter={['!', ['has', 'point_count']]}
                 paint={{
-                    'circle-radius': 7, // Made larger to be seen
-                    'circle-color': '#22c000', // RED so we can distinguish from default icons
+                    // Increase radius if selected
+                    'circle-radius': [
+                        'case',
+                        ['==', ['get', 'id'], selectedStopId || -1],
+                        12,
+                        7
+                    ],
+                    'circle-color': '#22c000',
                     'circle-stroke-width': 2,
                     'circle-stroke-color': '#ffffff',
                 }}
