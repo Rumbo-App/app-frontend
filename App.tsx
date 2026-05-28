@@ -33,7 +33,8 @@ export default function App() {
   };
 
   const handleStopPress = (stop: any) => {
-      setSelectedStop(stop);
+      // Add a timestamp to ensure state change even if same stop is clicked
+      setSelectedStop({ ...stop, _timestamp: Date.now() });
   };
 
   useEffect(() => {
